@@ -1,31 +1,46 @@
-import { useState } from "react";
+import {
+  useState,
+  type FormEvent,
+} from "react";
+
 import longbranchLogo from "../assets/longbranch-logo.png";
 
+type Employee = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  mustChangePassword: boolean;
+  mustCompleteProfile: boolean;
+};
+
 type LoginProps = {
-  onLogin: (employee: {
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-    mustChangePassword: boolean;
-  }) => void;
+  onLogin: (
+    employee: Employee
+  ) => void;
 };
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5000";
 
-function Login({ onLogin }: LoginProps) {
-  const [email, setEmail] = useState("");
+function Login({
+  onLogin,
+}: LoginProps) {
+  const [email, setEmail] =
+    useState("");
+
   const [password, setPassword] =
     useState("");
+
   const [error, setError] =
     useState("");
+
   const [loading, setLoading] =
     useState(false);
 
   const handleSubmit = async (
-    event: React.FormEvent
+    event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
@@ -33,21 +48,27 @@ function Login({ onLogin }: LoginProps) {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        `${API_URL}/api/auth/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            email,
-            password,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          `${API_URL}/api/auth/login`,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            credentials:
+              "include",
+
+            body:
+              JSON.stringify({
+                email,
+                password,
+              }),
+          }
+        );
 
       const data =
         await response.json();
@@ -59,7 +80,9 @@ function Login({ onLogin }: LoginProps) {
         );
       }
 
-      onLogin(data.employee);
+      onLogin(
+        data.employee
+      );
     } catch (error) {
       setError(
         error instanceof Error
@@ -83,17 +106,21 @@ function Login({ onLogin }: LoginProps) {
 
           <div className="login-brand-copy">
             <p className="login-eyebrow">
-              Longbranch Automation & Controls
+              Longbranch Automation
+              & Controls
             </p>
 
             <h1>
-              Business Management System
+              Business Management
+              System
             </h1>
 
             <p className="login-description">
-              Secure employee access for
-              customers, facilities, jobs,
-              billing, and business operations.
+              Secure employee access
+              for customers,
+              facilities, jobs,
+              billing, and business
+              operations.
             </p>
           </div>
         </section>
@@ -105,18 +132,23 @@ function Login({ onLogin }: LoginProps) {
                 Employee Portal
               </p>
 
-              <h2>Welcome back</h2>
+              <h2>
+                Welcome back
+              </h2>
 
               <p>
-                Sign in to continue to the
-                Longbranch business management
+                Sign in to continue
+                to the Longbranch
+                business management
                 system.
               </p>
             </div>
 
             <form
               className="login-form"
-              onSubmit={handleSubmit}
+              onSubmit={
+                handleSubmit
+              }
             >
               <div className="login-field">
                 <label htmlFor="email">
@@ -127,9 +159,12 @@ function Login({ onLogin }: LoginProps) {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setEmail(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                   autoComplete="email"
@@ -147,9 +182,12 @@ function Login({ onLogin }: LoginProps) {
                   id="password"
                   type="password"
                   value={password}
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setPassword(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                   autoComplete="current-password"
@@ -176,7 +214,8 @@ function Login({ onLogin }: LoginProps) {
             </form>
 
             <p className="login-secure-note">
-              Authorized employees only
+              Authorized employees
+              only
             </p>
           </div>
         </section>

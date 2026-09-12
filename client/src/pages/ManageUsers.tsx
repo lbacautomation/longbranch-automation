@@ -12,6 +12,17 @@ type EmployeeUser = {
   role: string;
   isActive: boolean;
   mustChangePassword: boolean;
+  mustCompleteProfile?: boolean;
+
+  phone?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+  startDate?: string | null;
+  emergencyContact?: string | null;
+  emergencyPhone?: string | null;
+
   createdAt: string;
 };
 
@@ -27,6 +38,11 @@ function ManageUsers() {
 
   const [message, setMessage] =
     useState("");
+
+  const [
+    expandedUserId,
+    setExpandedUserId,
+  ] = useState<number | null>(null);
 
   const loadUsers = async () => {
     try {
@@ -71,6 +87,38 @@ function ManageUsers() {
     void loadUsers();
   }, []);
 
+  const toggleProfile = (
+    userId: number
+  ) => {
+    setExpandedUserId(
+      (currentId) =>
+        currentId === userId
+          ? null
+          : userId
+    );
+  };
+
+  const formatDate = (
+    value?: string | null
+  ) => {
+    if (!value) {
+      return "—";
+    }
+
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return "—";
+    }
+
+    return date.toLocaleDateString();
+  };
+
   const requirePasswordChange =
     async (
       user: EmployeeUser
@@ -114,7 +162,10 @@ function ManageUsers() {
               (currentUser) =>
                 currentUser.id ===
                 user.id
-                  ? data
+                  ? {
+                      ...currentUser,
+                      ...data,
+                    }
                   : currentUser
             )
         );
@@ -177,6 +228,15 @@ function ManageUsers() {
             )
         );
 
+        if (
+          expandedUserId ===
+          user.id
+        ) {
+          setExpandedUserId(
+            null
+          );
+        }
+
         setMessage(
           `${user.name} was deleted.`
         );
@@ -204,8 +264,8 @@ function ManageUsers() {
 
           <p className="subtitle">
             Manage employee portal
-            accounts and password
-            reset requirements.
+            accounts, profiles, and
+            password requirements.
           </p>
         </div>
       </header>
@@ -230,10 +290,9 @@ function ManageUsers() {
             </h3>
 
             <p>
-              Existing users can be
-              forced to change their
-              password without deleting
-              and recreating the account.
+              View employee profiles,
+              require password resets,
+              or remove portal accounts.
             </p>
           </div>
         </div>
@@ -277,66 +336,185 @@ function ManageUsers() {
             users.map(
               (user) => (
                 <div
-                  className="table-row"
+                  className="employee-account"
                   key={user.id}
                 >
-                  <strong>
-                    {user.name}
-                  </strong>
+                  <div className="table-row">
+                    <strong>
+                      {user.name}
+                    </strong>
 
-                  <span>
-                    {user.email}
-                  </span>
+                    <span>
+                      {user.email}
+                    </span>
 
-                  <span>
-                    {user.role}
-                  </span>
+                    <span>
+                      {user.role}
+                    </span>
 
-                  <span>
-                    {user.mustChangePassword
-                      ? "Change required"
-                      : "Current"}
-                  </span>
+                    <span>
+                      {user.mustChangePassword
+                        ? "Change required"
+                        : "Current"}
+                    </span>
 
-                  <span
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() =>
-                        requirePasswordChange(
-                          user
-                        )
-                      }
-                      disabled={
-                        user.role ===
-                        "ADMIN"
-                      }
-                    >
-                      Require Reset
-                    </button>
+                    <span className="employee-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          toggleProfile(
+                            user.id
+                          )
+                        }
+                      >
+                        {expandedUserId ===
+                        user.id
+                          ? "Hide Profile"
+                          : "View Profile"}
+                      </button>
 
-                    <button
-                      type="button"
-                      className="danger-button"
-                      onClick={() =>
-                        deleteUser(
-                          user
-                        )
-                      }
-                      disabled={
-                        user.role ===
-                        "ADMIN"
-                      }
-                    >
-                      Delete
-                    </button>
-                  </span>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          requirePasswordChange(
+                            user
+                          )
+                        }
+                        disabled={
+                          user.role ===
+                          "ADMIN"
+                        }
+                      >
+                        Require Reset
+                      </button>
+
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() =>
+                          deleteUser(
+                            user
+                          )
+                        }
+                        disabled={
+                          user.role ===
+                          "ADMIN"
+                        }
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  </div>
+
+                  {expandedUserId ===
+                    user.id && (
+                    <div className="employee-profile-panel">
+                      <div className="employee-profile-grid">
+                        <div>
+                          <span className="invoice-label">
+                            Phone
+                          </span>
+
+                          <p>
+                            {user.phone ||
+                              "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="invoice-label">
+                            Start Date
+                          </span>
+
+                          <p>
+                            {formatDate(
+                              user.startDate
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="invoice-label">
+                            Street Address
+                          </span>
+
+                          <p>
+                            {user.address ||
+                              "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="invoice-label">
+                            City
+                          </span>
+
+                          <p>
+                            {user.city ||
+                              "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="invoice-label">
+                            State
+                          </span>
+
+                          <p>
+                            {user.state ||
+                              "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="invoice-label">
+                            ZIP Code
+                          </span>
+
+                          <p>
+                            {user.zipCode ||
+                              "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="invoice-label">
+                            Emergency Contact
+                          </span>
+
+                          <p>
+                            {user.emergencyContact ||
+                              "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="invoice-label">
+                            Emergency Phone
+                          </span>
+
+                          <p>
+                            {user.emergencyPhone ||
+                              "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="invoice-label">
+                            Profile Status
+                          </span>
+
+                          <p>
+                            {user.mustCompleteProfile
+                              ? "Profile completion required"
+                              : "Complete"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             )

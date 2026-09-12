@@ -18,6 +18,14 @@ type CustomerFormProps = {
   ) => void;
 };
 
+type CustomerWithAddress =
+  Customer & {
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zipCode?: string | null;
+  };
+
 function CustomerForm({
   customer,
   onCancel,
@@ -30,6 +38,18 @@ function CustomerForm({
     useState("");
 
   const [phone, setPhone] =
+    useState("");
+
+  const [address, setAddress] =
+    useState("");
+
+  const [city, setCity] =
+    useState("");
+
+  const [state, setState] =
+    useState("");
+
+  const [zipCode, setZipCode] =
     useState("");
 
   const [notes, setNotes] =
@@ -49,24 +69,47 @@ function CustomerForm({
       setName("");
       setEmail("");
       setPhone("");
+      setAddress("");
+      setCity("");
+      setState("");
+      setZipCode("");
       setNotes("");
       return;
     }
 
+    const customerData =
+      customer as CustomerWithAddress;
+
     setName(
-      customer.name || ""
+      customerData.name || ""
     );
 
     setEmail(
-      customer.email || ""
+      customerData.email || ""
     );
 
     setPhone(
-      customer.phone || ""
+      customerData.phone || ""
+    );
+
+    setAddress(
+      customerData.address || ""
+    );
+
+    setCity(
+      customerData.city || ""
+    );
+
+    setState(
+      customerData.state || ""
+    );
+
+    setZipCode(
+      customerData.zipCode || ""
     );
 
     setNotes(
-      customer.notes || ""
+      customerData.notes || ""
     );
   }, [customer]);
 
@@ -97,6 +140,7 @@ function CustomerForm({
           url,
           {
             credentials: "include",
+
             method:
               isEditing
                 ? "PUT"
@@ -117,6 +161,22 @@ function CustomerForm({
 
               phone:
                 phone.trim() ||
+                null,
+
+              address:
+                address.trim() ||
+                null,
+
+              city:
+                city.trim() ||
+                null,
+
+              state:
+                state.trim() ||
+                null,
+
+              zipCode:
+                zipCode.trim() ||
                 null,
 
               notes:
@@ -164,10 +224,15 @@ function CustomerForm({
     <>
       <header className="page-header">
         <div>
-          <p className="eyebrow">
-            Longbranch Automation
-            & Controls
-          </p>
+          <div className="section-heading">
+  <p className="eyebrow">
+    Customers
+  </p>
+
+  <p className="section-description">
+    Manage customer accounts and facilities.
+  </p>
+</div>
 
           <h2>
             {isEditing
@@ -194,7 +259,7 @@ function CustomerForm({
       </header>
 
       <form
-        className="invoice-form"
+        className="invoice-form customer-form"
         onSubmit={
           handleSubmit
         }
@@ -220,7 +285,7 @@ function CustomerForm({
             </div>
           </div>
 
-          <div className="form-grid">
+          <div className="form-grid customer-form-grid">
             <label>
               <span>
                 Customer Name
@@ -280,6 +345,86 @@ function CustomerForm({
                 placeholder="Phone number"
               />
             </label>
+
+            <label>
+              <span>
+                Address
+              </span>
+
+              <input
+                type="text"
+                value={address}
+                onChange={(
+                  event
+                ) =>
+                  setAddress(
+                    event.target
+                      .value
+                  )
+                }
+                placeholder="Street address"
+              />
+            </label>
+
+            <label>
+              <span>
+                City
+              </span>
+
+              <input
+                type="text"
+                value={city}
+                onChange={(
+                  event
+                ) =>
+                  setCity(
+                    event.target
+                      .value
+                  )
+                }
+                placeholder="City"
+              />
+            </label>
+
+            <label>
+              <span>
+                State
+              </span>
+
+              <input
+                type="text"
+                value={state}
+                onChange={(
+                  event
+                ) =>
+                  setState(
+                    event.target
+                      .value
+                  )
+                }
+                placeholder="State"
+              />
+            </label>
+
+            <label>
+              <span>
+                ZIP Code
+              </span>
+
+              <input
+                type="text"
+                value={zipCode}
+                onChange={(
+                  event
+                ) =>
+                  setZipCode(
+                    event.target
+                      .value
+                  )
+                }
+                placeholder="ZIP code"
+              />
+            </label>
           </div>
         </section>
 
@@ -298,7 +443,7 @@ function CustomerForm({
           </div>
 
           <textarea
-            rows={6}
+            rows={4}
             value={notes}
             onChange={(
               event
@@ -312,21 +457,23 @@ function CustomerForm({
           />
         </section>
 
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={
-            saving
-          }
-        >
-          {saving
-            ? isEditing
-              ? "Saving Changes..."
-              : "Creating Customer..."
-            : isEditing
-              ? "Save Changes"
-              : "Create Customer"}
-        </button>
+        <div className="customer-form-actions">
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={
+              saving
+            }
+          >
+            {saving
+              ? isEditing
+                ? "Saving Changes..."
+                : "Creating Customer..."
+              : isEditing
+                ? "Save Changes"
+                : "Create Customer"}
+          </button>
+        </div>
       </form>
     </>
   );

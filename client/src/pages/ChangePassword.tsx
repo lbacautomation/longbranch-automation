@@ -12,6 +12,7 @@ type Employee = {
   email: string;
   role: string;
   mustChangePassword: boolean;
+  mustCompleteProfile: boolean;
 };
 
 type ChangePasswordProps = {
@@ -51,8 +52,7 @@ function ChangePassword({
     useState(false);
 
   const handleSubmit = async (
-    event:
-      FormEvent<HTMLFormElement>
+    event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
@@ -70,9 +70,7 @@ function ChangePassword({
       return;
     }
 
-    if (
-      newPassword.length < 12
-    ) {
+    if (newPassword.length < 12) {
       setError(
         "Your new password must be at least 12 characters."
       );
@@ -166,16 +164,20 @@ function ChangePassword({
           </p>
 
           <h1>
-            Welcome to Longbranch Automation & Controls
+            Welcome to Longbranch Automation
+            & Controls
           </h1>
 
           <p className="login-description">
             We’re glad you’re here,
-            {employeeName ? ` ${employeeName}` : ""}.
-            Before accessing the portal,
-            please replace your temporary
-            password with a new password
-            that only you know.
+            {employeeName
+              ? ` ${employeeName}`
+              : ""}
+            . Before accessing the
+            portal, please replace
+            your temporary password
+            with a new password that
+            only you know.
           </p>
         </div>
       </section>

@@ -21,6 +21,7 @@ type Employee = {
   email: string;
   role: string;
   mustChangePassword: boolean;
+  mustCompleteProfile: boolean;
 };
 
 const API_URL =
@@ -110,8 +111,12 @@ function App() {
 
   const renderPage = () => {
     switch (activePage) {
-      case "dashboard":
-        return <Dashboard />;
+     case "dashboard":
+  return (
+    <Dashboard
+      employeeName={employee?.name}
+    />
+  );
 
       case "customers":
         return (

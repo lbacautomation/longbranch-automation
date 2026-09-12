@@ -22,7 +22,12 @@ type Estimate = {
   customer: Customer;
 };
 
-function Dashboard() {
+type DashboardProps = {
+  employeeName?: string;
+};
+
+function Dashboard({ employeeName }: DashboardProps) {
+  const firstName = employeeName?.split(" ")[0];
   const [customers, setCustomers] =
     useState<Customer[]>([]);
 
@@ -233,24 +238,19 @@ function Dashboard() {
 
   return (
     <>
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">
-            Longbranch Automation
-            & Controls
-          </p>
+   <header className="page-header">
+  <div>
+    <p className="eyebrow">
+     Welcome back{firstName ? `, ${firstName}!` : ""}
+    </p>
 
-          <h2>
-            Dashboard
-          </h2>
+    <h2>Dashboard</h2>
 
-          <p className="subtitle">
-            Business overview and
-            current activity.
-          </p>
-        </div>
-      </header>
-
+    <p className="subtitle">
+      Here’s what’s happening at Longbranch today.
+    </p>
+  </div>
+</header>
       {error && (
         <div className="form-error">
           {error}

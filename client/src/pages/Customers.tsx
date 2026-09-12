@@ -427,6 +427,7 @@ function Customers({
     {error}
   </div>
 )}
+<div className="customer-detail-grid">
 
         <section className="form-card">
           <div className="form-card-header">
@@ -497,6 +498,33 @@ function Customers({
                   "—"}
               </p>
             </div>
+            <div>
+  <span className="invoice-label">
+    Address
+  </span>
+  <p>{selectedCustomer.address || "—"}</p>
+</div>
+
+<div>
+  <span className="invoice-label">
+    City
+  </span>
+  <p>{selectedCustomer.city || "—"}</p>
+</div>
+
+<div>
+  <span className="invoice-label">
+    State
+  </span>
+  <p>{selectedCustomer.state || "—"}</p>
+</div>
+
+<div>
+  <span className="invoice-label">
+    ZIP Code
+  </span>
+  <p>{selectedCustomer.zipCode || "—"}</p>
+</div>
           </div>
         </section>
 
@@ -513,11 +541,13 @@ function Customers({
               </p>
             </div>
           </div>
+          
 
           <p>
             {selectedCustomer.notes ||
               "No notes"}
           </p>
+          
         </section>
 
         <section className="invoice-section">
@@ -829,6 +859,7 @@ function Customers({
             </div>
           )}
         </section>
+        </div>
       </>
     );
   }

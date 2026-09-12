@@ -26,69 +26,80 @@ function JobForm({
   onCancel,
   onSaved,
 }: JobFormProps) {
+  const isEditing =
+    Boolean(job);
 
-    const isEditing =
-  Boolean(job);
+  const [name, setName] =
+    useState(
+      job?.name || ""
+    );
 
-const [jobNumber, setJobNumber] =
-  useState(
-    job?.jobNumber || ""
-  );
+  const [
+    description,
+    setDescription,
+  ] =
+    useState(
+      job?.description || ""
+    );
 
-const [name, setName] =
-  useState(
-    job?.name || ""
-  );
+  const [status, setStatus] =
+    useState(
+      job?.status || "OPEN"
+    );
 
-const [description, setDescription] =
-  useState(
-    job?.description || ""
-  );
+  const [
+    customerId,
+    setCustomerId,
+  ] =
+    useState(
+      job?.facility
+        ?.customer
+        ?.id
+        ? String(
+            job.facility
+              .customer.id
+          )
+        : ""
+    );
 
-const [status, setStatus] =
-  useState(
-    job?.status || "OPEN"
-  );
+  const [
+    facilityId,
+    setFacilityId,
+  ] =
+    useState(
+      job?.facility?.id
+        ? String(
+            job.facility.id
+          )
+        : ""
+    );
 
-const [customerId, setCustomerId] =
-  useState(
-    job?.facility
-      ?.customer
-      ?.id
-      ? String(
-          job.facility.customer.id
-        )
-      : ""
-  );
+  const [
+    startDate,
+    setStartDate,
+  ] =
+    useState(
+      job?.startDate
+        ? job.startDate.slice(
+            0,
+            10
+          )
+        : ""
+    );
 
-const [facilityId, setFacilityId] =
-  useState(
-    job?.facility?.id
-      ? String(
-          job.facility.id
-        )
-      : ""
-  );
+  const [
+    endDate,
+    setEndDate,
+  ] =
+    useState(
+      job?.endDate
+        ? job.endDate.slice(
+            0,
+            10
+          )
+        : ""
+    );
 
-const [startDate, setStartDate] =
-  useState(
-    job?.startDate
-      ? job.startDate.slice(
-          0,
-          10
-        )
-      : ""
-  );
-
-const [endDate, setEndDate] =
-  useState(
-    job?.endDate
-      ? job.endDate.slice(
-          0,
-          10
-        )
-      : ""
-  );
   const [saving, setSaving] =
     useState(false);
 
@@ -117,17 +128,11 @@ const [endDate, setEndDate] =
 
     setError("");
 
-    if (!jobNumber.trim()) {
-      setError(
-        "Job number is required."
-      );
-      return;
-    }
-
     if (!name.trim()) {
       setError(
         "Job name is required."
       );
+
       return;
     }
 
@@ -135,36 +140,23 @@ const [endDate, setEndDate] =
       setError(
         "Please select a facility."
       );
+
       return;
     }
 
     try {
       setSaving(true);
 
-    const url =
-  isEditing
-    ? `${API_URL}/api/jobs/${job?.id}`
-    : `${API_URL}/api/jobs`;
-
-const response =
-  await fetch(
-    url,
-    
-    {
-      credentials: "include",
-      method:
+      const url =
         isEditing
-          ? "PUT"
-          : "POST",
+          ? `${API_URL}/api/jobs/${job?.id}`
+          : `${API_URL}/api/facilities/${facilityId}/jobs`;
 
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
-
-      body: JSON.stringify({
+      const body =
+        isEditing
+          ? {
               jobNumber:
-                jobNumber.trim(),
+                job?.jobNumber,
 
               name:
                 name.trim(),
@@ -187,19 +179,63 @@ const response =
                 Number(
                   facilityId
                 ),
-            }),
+            }
+          : {
+              name:
+                name.trim(),
+
+              description:
+                description.trim() ||
+                null,
+
+              status,
+
+              startDate:
+                startDate ||
+                null,
+
+              endDate:
+                endDate ||
+                null,
+            };
+
+      const response =
+        await fetch(
+          url,
+          {
+            credentials:
+              "include",
+
+            method:
+              isEditing
+                ? "PUT"
+                : "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify(
+                body
+              ),
           }
         );
 
       if (!response.ok) {
         let message =
-          "Unable to create job.";
+          isEditing
+            ? "Unable to update job."
+            : "Unable to create job.";
 
         try {
           const data =
             await response.json();
 
-          if (data.message) {
+          if (
+            data.message
+          ) {
             message =
               data.message;
           }
@@ -213,19 +249,23 @@ const response =
       }
 
       const savedJob:
-  Job =
-    await response.json();
+        Job =
+          await response.json();
 
-onSaved(
-  savedJob
-);
+      onSaved(
+        savedJob
+      );
     } catch (error) {
-      console.error(error);
+      console.error(
+        error
+      );
 
       setError(
         error instanceof Error
           ? error.message
-          : "Unable to create job."
+          : isEditing
+            ? "Unable to update job."
+            : "Unable to create job."
       );
     } finally {
       setSaving(false);
@@ -242,21 +282,24 @@ onSaved(
           </p>
 
           <h2>
-  {isEditing
-    ? "Edit Job"
-    : "New Job"}
-</h2>
+            {isEditing
+              ? "Edit Job"
+              : "New Job"}
+          </h2>
 
           <p className="subtitle">
-            Create a job for a
-            customer facility.
+            {isEditing
+              ? "Update job information."
+              : "Create a job for a customer facility."}
           </p>
         </div>
 
         <button
           type="button"
           className="secondary-button"
-          onClick={onCancel}
+          onClick={
+            onCancel
+          }
         >
           Back to Jobs
         </button>
@@ -289,26 +332,6 @@ onSaved(
           </div>
 
           <div className="form-grid">
-            <label>
-              <span>
-                Job Number
-              </span>
-
-              <input
-                type="text"
-                value={jobNumber}
-                onChange={(
-                  event
-                ) =>
-                  setJobNumber(
-                    event.target
-                      .value
-                  )
-                }
-                placeholder="LB-2026-002"
-              />
-            </label>
-
             <label>
               <span>
                 Job Name
@@ -356,7 +379,9 @@ onSaved(
                 </option>
 
                 {customers.map(
-                  (customer) => (
+                  (
+                    customer
+                  ) => (
                     <option
                       key={
                         customer.id
@@ -400,7 +425,9 @@ onSaved(
                 </option>
 
                 {facilities.map(
-                  (facility) => (
+                  (
+                    facility
+                  ) => (
                     <option
                       key={
                         facility.id
@@ -527,19 +554,21 @@ onSaved(
           />
         </section>
 
-       <button
-  type="submit"
-  className="primary-button"
-  disabled={saving}
->
-  {saving
-    ? isEditing
-      ? "Saving Changes..."
-      : "Creating Job..."
-    : isEditing
-      ? "Save Changes"
-      : "Create Job"}
-</button>
+        <button
+          type="submit"
+          className="primary-button"
+          disabled={
+            saving
+          }
+        >
+          {saving
+            ? isEditing
+              ? "Saving Changes..."
+              : "Creating Job..."
+            : isEditing
+              ? "Save Changes"
+              : "Create Job"}
+        </button>
       </form>
     </>
   );

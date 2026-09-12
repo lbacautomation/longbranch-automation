@@ -459,10 +459,18 @@ app.post(
       }
 
       const {
-        name,
-        email,
-        password,
-      } = req.body;
+  name,
+  email,
+  password,
+  phone,
+  address,
+  city,
+  state,
+  zipCode,
+  startDate,
+  emergencyContact,
+  emergencyPhone,
+} = req.body;
 
       if (
         !name?.trim() ||
@@ -509,16 +517,31 @@ app.post(
 
       const employee =
         await prisma.employee.create({
-          data: {
-            name: name.trim(),
-            email:
-              normalizedEmail,
-            passwordHash,
-            role: "EMPLOYEE",
-            isActive: true,
-            mustChangePassword:
-              true,
-          },
+       data: {
+  name: name.trim(),
+  email: normalizedEmail,
+  passwordHash,
+  role: "EMPLOYEE",
+  isActive: true,
+  mustChangePassword: true,
+  mustCompleteProfile: true,
+
+  phone: phone?.trim() || null,
+  address: address?.trim() || null,
+  city: city?.trim() || null,
+  state: state?.trim() || null,
+  zipCode: zipCode?.trim() || null,
+
+  startDate: startDate
+    ? new Date(startDate)
+    : null,
+
+  emergencyContact:
+    emergencyContact?.trim() || null,
+
+  emergencyPhone:
+    emergencyPhone?.trim() || null,
+},
           select: {
             id: true,
             name: true,
@@ -572,7 +595,16 @@ app.get("/api/customers", async (_req, res) => {
 
 app.post("/api/customers", async (req, res) => {
   try {
-    const { name, email, phone, notes } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      address,
+      city,
+      state,
+      zipCode,
+      notes,
+    } = req.body;
 
     if (!name?.trim()) {
       return res.status(400).json({
@@ -583,15 +615,20 @@ app.post("/api/customers", async (req, res) => {
     const customer = await prisma.customer.create({
       data: {
         name: name.trim(),
-        email: email || null,
-        phone: phone || null,
-        notes: notes || null,
+        email: email?.trim() || null,
+        phone: phone?.trim() || null,
+        address: address?.trim() || null,
+        city: city?.trim() || null,
+        state: state?.trim() || null,
+        zipCode: zipCode?.trim() || null,
+        notes: notes?.trim() || null,
       },
     });
 
     res.status(201).json(customer);
   } catch (error) {
     console.error(error);
+
     res.status(500).json({
       message: "Unable to create customer",
     });
@@ -719,8 +756,8 @@ app.delete("/api/facilities/:id", async (req, res) => {
 app.post("/api/facilities/:id/jobs", async (req, res) => {
   try {
     const facilityId = Number(req.params.id);
+
     const {
-      jobNumber,
       name,
       description,
       status,
@@ -728,26 +765,52 @@ app.post("/api/facilities/:id/jobs", async (req, res) => {
       endDate,
     } = req.body;
 
-    if (!jobNumber?.trim()) {
-      return res.status(400).json({
-        message: "Job number is required",
-      });
-    }
-
     if (!name?.trim()) {
       return res.status(400).json({
         message: "Job name is required",
       });
     }
 
+    const year = new Date().getFullYear();
+
+    const latestJob = await prisma.job.findFirst({
+      where: {
+        jobNumber: {
+          startsWith: `LB-${year}-`,
+        },
+      },
+      orderBy: {
+        jobNumber: "desc",
+      },
+    });
+
+    let nextNumber = 1;
+
+    if (latestJob) {
+      const lastNumber = Number(
+        latestJob.jobNumber.split("-").pop()
+      );
+
+      if (!Number.isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    const jobNumber =
+      `LB-${year}-${String(nextNumber).padStart(3, "0")}`;
+
     const job = await prisma.job.create({
       data: {
-        jobNumber: jobNumber.trim(),
+        jobNumber,
         name: name.trim(),
         description: description || null,
         status: status || "ACTIVE",
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
+        startDate: startDate
+          ? new Date(startDate)
+          : null,
+        endDate: endDate
+          ? new Date(endDate)
+          : null,
         facilityId,
       },
     });
@@ -755,6 +818,7 @@ app.post("/api/facilities/:id/jobs", async (req, res) => {
     res.status(201).json(job);
   } catch (error) {
     console.error(error);
+
     res.status(500).json({
       message: "Unable to create job",
     });
@@ -1476,15 +1540,25 @@ app.get(
       const employees =
         await prisma.employee.findMany({
           select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            isActive: true,
-            mustChangePassword:
-              true,
-            createdAt: true,
-          },
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  isActive: true,
+  mustChangePassword: true,
+  mustCompleteProfile: true,
+
+  phone: true,
+  address: true,
+  city: true,
+  state: true,
+  zipCode: true,
+  startDate: true,
+  emergencyContact: true,
+  emergencyPhone: true,
+
+  createdAt: true,
+},
 
           orderBy: {
             name: "asc",
@@ -2330,9 +2404,9 @@ app.post("/api/facilities", async (req, res) => {
 
 app.put("/api/customers/:id", async (req, res) => {
   try {
-    const customerId = Number(req.params.id);
+    const id = Number(req.params.id);
 
-    if (!Number.isInteger(customerId)) {
+    if (!Number.isInteger(id)) {
       return res.status(400).json({
         message: "Invalid customer id",
       });
@@ -2342,6 +2416,10 @@ app.put("/api/customers/:id", async (req, res) => {
       name,
       email,
       phone,
+      address,
+      city,
+      state,
+      zipCode,
       notes,
     } = req.body;
 
@@ -2351,41 +2429,29 @@ app.put("/api/customers/:id", async (req, res) => {
       });
     }
 
-    const customer =
-      await prisma.customer.update({
-        where: {
-          id: customerId,
-        },
+    const customer = await prisma.customer.update({
+      where: {
+        id,
+      },
 
-        data: {
-          name: name.trim(),
-
-          email:
-            email?.trim() || null,
-
-          phone:
-            phone?.trim() || null,
-
-          notes:
-            notes?.trim() || null,
-        },
-
-        include: {
-          facilities: {
-            include: {
-              jobs: true,
-            },
-          },
-        },
-      });
+      data: {
+        name: name.trim(),
+        email: email?.trim() || null,
+        phone: phone?.trim() || null,
+        address: address?.trim() || null,
+        city: city?.trim() || null,
+        state: state?.trim() || null,
+        zipCode: zipCode?.trim() || null,
+        notes: notes?.trim() || null,
+      },
+    });
 
     res.json(customer);
   } catch (error) {
     console.error(error);
 
     res.status(500).json({
-      message:
-        "Unable to update customer",
+      message: "Unable to update customer",
     });
   }
 });

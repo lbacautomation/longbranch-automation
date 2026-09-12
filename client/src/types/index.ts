@@ -1,9 +1,13 @@
 export type Customer = {
   id: number;
-  name: string;
-  email?: string | null;
-  phone?: string | null;
-  notes?: string | null;
+ name: string;
+email?: string | null;
+phone?: string | null;
+address?: string | null;
+city?: string | null;
+state?: string | null;
+zipCode?: string | null;
+notes?: string | null;
 
   facilities?: {
     id: number;
