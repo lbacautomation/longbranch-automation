@@ -743,104 +743,224 @@ function Invoices() {
       setFormError("");
     };
 
-  const handleDownloadPdf =
-    async () => {
-      if (
-        !selectedInvoice ||
-        !invoicePdfRef.current
-      ) {
-        return;
+  // Build the customer-facing PDF independently of the portal layout.
+  const handleDownloadPdf = async () => {
+    if (!selectedInvoice || !invoicePdfRef.current) return;
+
+    try {
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const left = 18;
+      const right = pageWidth - 18;
+      const contentWidth = right - left;
+      const navy = [36, 54, 77] as const;
+      const muted = [82, 98, 118] as const;
+      const pale = [234, 240, 247] as const;
+      let y = 0;
+      let pageNumber = 1;
+
+      const color = (rgb: readonly number[]) =>
+        pdf.setTextColor(rgb[0], rgb[1], rgb[2]);
+
+      const footer = () => {
+        pdf.setDrawColor(210, 222, 235);
+        pdf.line(left, pageHeight - 21, right, pageHeight - 21);
+        color(muted);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8.5);
+        pdf.text("Longbranch Automation & Controls", left, pageHeight - 15);
+        pdf.text(`Page ${pageNumber}`, right, pageHeight - 15, { align: "right" });
+      };
+
+      const nextPage = () => {
+        footer();
+        pdf.addPage();
+        pageNumber += 1;
+        y = 22;
+      };
+
+      const ensureSpace = (height: number) => {
+        if (y + height > pageHeight - 27) nextPage();
+      };
+
+      // Capture only the logo; all PDF text and tables remain crisp vector content.
+      const logo = invoicePdfRef.current.querySelector<HTMLImageElement>(
+        ".invoice-detail-logo"
+      );
+      if (logo) {
+        const logoCanvas = await html2canvas(logo, {
+          scale: 2,
+          backgroundColor: null,
+          useCORS: true,
+        });
+        const logoWidth = 57;
+        const logoHeight = (logoCanvas.height / logoCanvas.width) * logoWidth;
+        pdf.addImage(logoCanvas.toDataURL("image/png"), "PNG", left, 19, logoWidth, logoHeight);
       }
 
-      try {
-        const canvas =
-          await html2canvas(
-            invoicePdfRef.current,
-            {
-              scale: 2,
-              backgroundColor:
-                "#ffffff",
-              useCORS: true,
-            }
-          );
+      color(navy);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(23);
+      pdf.text("INVOICE", right, 28, { align: "right" });
 
-        const imageData =
-          canvas.toDataURL(
-            "image/png"
-          );
+      const metaX = right - 69;
+      let metaY = 39;
+      const meta = [
+        ["INVOICE #", selectedInvoice.invoiceNumber],
+        ["ISSUE DATE", formatDate(selectedInvoice.issueDate)],
+        ["DUE DATE", formatDate(selectedInvoice.dueDate)],
+      ];
+      meta.forEach(([label, value]) => {
+        color(muted);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8);
+        pdf.text(label, metaX, metaY);
+        color(navy);
+        pdf.setFontSize(9.5);
+        pdf.text(value, right, metaY, { align: "right" });
+        metaY += 8;
+      });
 
-        const pdf =
-          new jsPDF({
-            orientation:
-              "portrait",
-            unit: "mm",
-            format: "letter",
-          });
+      y = 76;
+      pdf.setDrawColor(...navy);
+      pdf.setLineWidth(0.5);
+      pdf.line(left, y, right, y);
+      y += 10;
 
-        const pageWidth =
-          pdf.internal.pageSize.getWidth();
+      const halfGap = 5;
+      const halfWidth = (contentWidth - halfGap) / 2;
+      const sectionHeader = (title: string, x: number) => {
+        pdf.setFillColor(...pale);
+        pdf.rect(x, y, halfWidth, 8, "F");
+        color(navy);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        pdf.text(title, x + 3, y + 5.5);
+      };
+      sectionHeader("BILL TO", left);
+      sectionHeader("JOB", left + halfWidth + halfGap);
+      y += 13;
 
-        const pageHeight =
-          pdf.internal.pageSize.getHeight();
+      const customerLines = [
+        selectedInvoice.customer.name,
+        selectedInvoice.customer.email,
+        selectedInvoice.customer.phone,
+      ].filter((value): value is string => Boolean(value));
+      const jobLines = selectedInvoice.job
+        ? [
+            selectedInvoice.job.jobNumber,
+            selectedInvoice.job.name,
+            selectedInvoice.job.facility?.name,
+          ].filter((value): value is string => Boolean(value))
+        : ["No job assigned"];
+      const partyLineCount = Math.max(customerLines.length, jobLines.length);
+      for (let index = 0; index < partyLineCount; index += 1) {
+        const drawPartyLine = (value: string | undefined, x: number) => {
+          if (!value) return;
+          color(index === 0 ? navy : muted);
+          pdf.setFont("helvetica", index === 0 ? "bold" : "normal");
+          pdf.setFontSize(index === 0 ? 11 : 9);
+          const lines = pdf.splitTextToSize(value, halfWidth - 5);
+          pdf.text(lines[0], x, y);
+        };
+        drawPartyLine(customerLines[index], left);
+        drawPartyLine(jobLines[index], left + halfWidth + halfGap);
+        y += 6;
+      }
+      y += 14;
 
-        const margin = 7;
+      const columns = {
+        description: left + 3,
+        qty: left + contentWidth * 0.73,
+        rate: left + contentWidth * 0.86,
+        amount: right - 3,
+      };
+      const tableHeader = () => {
+        pdf.setFillColor(...navy);
+        pdf.rect(left, y, contentWidth, 10, "F");
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8.5);
+        pdf.text("DESCRIPTION", columns.description, y + 6.5);
+        pdf.text("QTY", columns.qty, y + 6.5, { align: "right" });
+        pdf.text("RATE", columns.rate, y + 6.5, { align: "right" });
+        pdf.text("AMOUNT", columns.amount, y + 6.5, { align: "right" });
+        y += 10;
+      };
+      tableHeader();
 
-        const availableWidth =
-          pageWidth -
-          margin * 2;
-
-        const imageWidth =
-          availableWidth;
-
-        const imageHeight =
-          (canvas.height *
-            imageWidth) /
-          canvas.width;
-
-        if (
-          imageHeight <=
-          pageHeight -
-            margin * 2
-        ) {
-          pdf.addImage(
-            imageData,
-            "PNG",
-            margin,
-            margin,
-            imageWidth,
-            imageHeight
-          );
-        } else {
-          const printableHeight =
-            pageHeight -
-            margin * 2;
-
-          const scale =
-            printableHeight /
-            imageHeight;
-
-          pdf.addImage(
-            imageData,
-            "PNG",
-            margin,
-            margin,
-            imageWidth *
-              scale,
-            imageHeight *
-              scale
-          );
+      for (const item of selectedInvoice.lineItems ?? []) {
+        color(navy);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9.5);
+        const descriptionLines: string[] = pdf.splitTextToSize(
+          item.description,
+          contentWidth * 0.57
+        );
+        const rowHeight = Math.max(12, descriptionLines.length * 5 + 6);
+        if (y + rowHeight > pageHeight - 35) {
+          nextPage();
+          tableHeader();
         }
-
-        pdf.save(
-          `${selectedInvoice.invoiceNumber}.pdf`
-        );
-      } catch (error) {
-        console.error(
-          "Unable to generate invoice PDF",
-          error
-        );
+        pdf.text(descriptionLines, columns.description, y + 7);
+        pdf.text(String(item.quantity), columns.qty, y + 7, { align: "right" });
+        pdf.text(formatCurrency(Number(item.rate)), columns.rate, y + 7, { align: "right" });
+        pdf.setFont("helvetica", "bold");
+        pdf.text(formatCurrency(Number(item.amount)), columns.amount, y + 7, {
+          align: "right",
+        });
+        pdf.setDrawColor(220, 229, 239);
+        pdf.line(left, y + rowHeight, right, y + rowHeight);
+        y += rowHeight;
       }
-    };
+
+      y += 12;
+      const notesWidth = contentWidth * 0.56;
+      const totalsX = left + contentWidth * 0.62;
+      const notesLines: string[] = pdf.splitTextToSize(
+        selectedInvoice.notes || "No notes",
+        notesWidth - 6
+      );
+      ensureSpace(Math.max(45, notesLines.length * 5 + 18));
+      pdf.setFillColor(...pale);
+      pdf.rect(left, y, notesWidth, 8, "F");
+      color(navy);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9);
+      pdf.text("NOTES", left + 3, y + 5.5);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      color(muted);
+      pdf.text(notesLines, left + 3, y + 15);
+
+      const totalRow = (label: string, value: number, rowY: number) => {
+        color(navy);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9.5);
+        pdf.text(label, totalsX + 3, rowY);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(formatCurrency(value), right - 3, rowY, { align: "right" });
+      };
+      totalRow("Subtotal", Number(selectedInvoice.subtotal), y + 5);
+      totalRow("Discount", Number(selectedInvoice.discount), y + 15);
+      pdf.setFillColor(...pale);
+      pdf.rect(totalsX, y + 22, right - totalsX, 13, "F");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(12);
+      color(navy);
+      pdf.text("Total", totalsX + 3, y + 30);
+      pdf.text(formatCurrency(Number(selectedInvoice.total)), right - 3, y + 30, {
+        align: "right",
+      });
+
+      footer();
+      pdf.save(`${selectedInvoice.invoiceNumber}.pdf`);
+    } catch (error) {
+      console.error("Unable to generate invoice PDF", error);
+      window.alert("Unable to generate the invoice PDF. Please try again.");
+    }
+  };
 
   return (
     <>
@@ -881,71 +1001,42 @@ function Invoices() {
             className="invoice-detail"
             ref={invoicePdfRef}
           >
-            <div className="invoice-detail-top">
-              <div>
-                <img
-                  src={
-                    longbranchLogo
-                  }
-                  alt="Longbranch Automation & Controls"
-                  className="invoice-detail-logo"
-                />
-              </div>
+           <div className="invoice-detail-top">
+  <div className="invoice-company">
+    <img
+      src={longbranchLogo}
+      alt="Longbranch Automation & Controls"
+      className="invoice-detail-logo"
+    />
+  </div>
 
-              <div className="invoice-detail-meta">
-                <div>
-                  <span>
-                    Invoice
-                  </span>
+  <div className="invoice-heading">
+    <h1>INVOICE</h1>
 
-                  <strong>
-                    {
-                      selectedInvoice.invoiceNumber
-                    }
-                  </strong>
-                </div>
+    <div className="invoice-detail-meta">
+      <div>
+        <span>Invoice #</span>
+        <strong>
+          {selectedInvoice.invoiceNumber}
+        </strong>
+      </div>
 
-                <div>
-                  <span>
-                    Issue Date
-                  </span>
+      <div>
+        <span>Issue Date</span>
+        <strong>
+          {formatDate(selectedInvoice.issueDate)}
+        </strong>
+      </div>
 
-                  <strong>
-                    {formatDate(
-                      selectedInvoice.issueDate
-                    )}
-                  </strong>
-                </div>
-
-                <div>
-                  <span>
-                    Due Date
-                  </span>
-
-                  <strong>
-                    {formatDate(
-                      selectedInvoice.dueDate
-                    )}
-                  </strong>
-                </div>
-
-                <div>
-                  <span>
-                    Status
-                  </span>
-
-                  <strong>
-                    <span
-                      className={`status ${selectedInvoice.status.toLowerCase()}`}
-                    >
-                      {
-                        selectedInvoice.status
-                      }
-                    </span>
-                  </strong>
-                </div>
-              </div>
-            </div>
+      <div>
+        <span>Due Date</span>
+        <strong>
+          {formatDate(selectedInvoice.dueDate)}
+        </strong>
+      </div>
+    </div>
+  </div>
+</div>
 
             <div className="invoice-party-grid">
               <div>

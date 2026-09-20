@@ -17,8 +17,7 @@ function Sidebar({
   employeeRole,
   onCreateUser,
 }: SidebarProps) {
-  const [menuOpen, setMenuOpen] =
-    useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const navigate = (page: string) => {
     onNavigate(page);
@@ -52,9 +51,7 @@ function Sidebar({
           type="button"
           className="mobile-menu-button"
           onClick={() =>
-            setMenuOpen(
-              (current) => !current
-            )
+            setMenuOpen((current) => !current)
           }
           aria-expanded={menuOpen}
           aria-label="Toggle navigation"
@@ -72,95 +69,89 @@ function Sidebar({
       >
         <nav>
           <button
+            type="button"
             className={
-              activePage === "dashboard"
-                ? "active"
-                : ""
+              activePage === "dashboard" ? "active" : ""
             }
-            onClick={() =>
-              navigate("dashboard")
-            }
+            onClick={() => navigate("dashboard")}
           >
             Dashboard
           </button>
 
           <button
+            type="button"
             className={
-              activePage === "customers"
-                ? "active"
-                : ""
+              activePage === "customers" ? "active" : ""
             }
-            onClick={() =>
-              navigate("customers")
-            }
+            onClick={() => navigate("customers")}
           >
             Customers
           </button>
 
           <button
+            type="button"
             className={
-              activePage === "jobs"
-                ? "active"
-                : ""
+              activePage === "jobs" ? "active" : ""
             }
-            onClick={() =>
-              navigate("jobs")
-            }
+            onClick={() => navigate("jobs")}
           >
             Jobs
           </button>
 
           <button
+            type="button"
             className={
-              activePage === "estimates"
-                ? "active"
-                : ""
+              activePage === "estimates" ? "active" : ""
             }
-            onClick={() =>
-              navigate("estimates")
-            }
+            onClick={() => navigate("estimates")}
           >
             Estimates
           </button>
 
-  
+          <button
+            type="button"
+            className={
+              activePage === "invoices" ? "active" : ""
+            }
+            onClick={() => navigate("invoices")}
+          >
+            Invoices
+          </button>
         </nav>
 
         <div className="sidebar-actions">
-  {employeeRole === "ADMIN" && (
-    <>
-      <button
-        type="button"
-        className={
-          activePage === "manage-users"
-            ? "create-user-button active"
-            : "create-user-button"
-        }
-        onClick={() =>
-          navigate("manage-users")
-        }
-      >
-        Manage Users
-      </button>
+          {employeeRole === "ADMIN" && (
+            <>
+              <button
+                type="button"
+                className={
+                  activePage === "manage-users"
+                    ? "create-user-button active"
+                    : "create-user-button"
+                }
+                onClick={() => navigate("manage-users")}
+              >
+                Manage Users
+              </button>
 
-      <button
-        type="button"
-        className="create-user-button"
-        onClick={handleCreateUser}
-      >
-        Create User
-      </button>
-    </>
-  )}
+              <button
+                type="button"
+                className="create-user-button"
+                onClick={handleCreateUser}
+              >
+                Create User
+              </button>
+            </>
+          )}
 
-  <button
-    type="button"
-    className="logout-button"
-    onClick={handleLogout}
-  >
-    Log Out
-  </button>
-</div>
+          <button
+            type="button"
+            className="logout-button"
+            onClick={handleLogout}
+          >
+            Log Out
+          </button>
+        </div>
       </div>
     </aside>
   );

@@ -87,6 +87,7 @@ type AuthenticatedRequest = Request & {
     email: string;
     role: string;
     mustChangePassword: boolean;
+    mustCompleteProfile: boolean;
   };
 };
 
@@ -119,6 +120,7 @@ const requireAuth = async (
         role: true,
         isActive: true,
         mustChangePassword: true,
+        mustCompleteProfile: true,
       },
     });
 
@@ -135,6 +137,7 @@ const requireAuth = async (
       role: employee.role,
       mustChangePassword:
         employee.mustChangePassword,
+      mustCompleteProfile: employee.mustCompleteProfile,
     };
 
     next();
@@ -150,6 +153,147 @@ app.get("/", (_req, res) => {
     message: "Longbranch Automation Books API is running",
   });
 });
+
+
+app.get(
+  "/api/auth/profile",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res
+  ) => {
+    try {
+      const employee =
+        await prisma.employee.findUnique({
+          where: {
+            id: req.employee!.id,
+          },
+
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            address: true,
+            city: true,
+            state: true,
+            zipCode: true,
+            startDate: true,
+            emergencyContact: true,
+            emergencyPhone: true,
+            role: true,
+            mustChangePassword: true,
+            mustCompleteProfile: true,
+          },
+        });
+
+      if (!employee) {
+        return res.status(404).json({
+          message:
+            "Employee not found",
+        });
+      }
+
+      return res.json({
+        employee,
+      });
+    } catch (error) {
+      console.error(
+        "Unable to load employee profile:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to load employee profile",
+      });
+    }
+  }
+);
+
+app.put(
+  "/api/auth/profile",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res
+  ) => {
+    try {
+      const {
+        name,
+        phone,
+        address,
+        city,
+        state,
+        zipCode,
+        emergencyContact,
+        emergencyPhone,
+      } = req.body;
+
+      if (
+        !name?.trim() ||
+        !phone?.trim() ||
+        !address?.trim() ||
+        !city?.trim() ||
+        !state?.trim() ||
+        !zipCode?.trim() ||
+        !emergencyContact?.trim() ||
+        !emergencyPhone?.trim()
+      ) {
+        return res.status(400).json({
+          message:
+            "Please complete all required profile fields",
+        });
+      }
+
+      const employee =
+        await prisma.employee.update({
+          where: {
+            id: req.employee!.id,
+          },
+
+          data: {
+            name: name.trim(),
+            phone: phone.trim(),
+            address: address.trim(),
+            city: city.trim(),
+            state: state.trim(),
+            zipCode: zipCode.trim(),
+            emergencyContact:
+              emergencyContact.trim(),
+            emergencyPhone:
+              emergencyPhone.trim(),
+            mustCompleteProfile:
+              false,
+          },
+
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            mustChangePassword: true,
+            mustCompleteProfile: true,
+          },
+        });
+
+      return res.json({
+        employee,
+      });
+    } catch (error) {
+      console.error(
+        "Unable to update employee profile:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to update employee profile",
+      });
+    }
+  }
+);
+
 
 app.post("/api/auth/login", async (req, res) => {
   try {
@@ -205,15 +349,17 @@ app.post("/api/auth/login", async (req, res) => {
     });
 
     return res.json({
-      employee: {
-        id: employee.id,
-        name: employee.name,
-        email: employee.email,
-        role: employee.role,
-        mustChangePassword:
-          employee.mustChangePassword,
-      },
-    });
+  employee: {
+    id: employee.id,
+    name: employee.name,
+    email: employee.email,
+    role: employee.role,
+    mustChangePassword:
+      employee.mustChangePassword,
+    mustCompleteProfile:
+      employee.mustCompleteProfile,
+  },
+});
   } catch (error) {
     console.error("Unable to log in:", error);
 
@@ -340,6 +486,8 @@ app.post(
             email: true,
             role: true,
             mustChangePassword:
+              true,
+            mustCompleteProfile:
               true,
           },
         });
