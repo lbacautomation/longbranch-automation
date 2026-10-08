@@ -91,6 +91,45 @@ type AuthenticatedRequest = Request & {
   };
 };
 
+type AuditAction =
+  | "CREATE"
+  | "UPDATE"
+  | "DELETE"
+  | "STATUS_CHANGE";
+
+type AuditEntityType =
+  | "Customer"
+  | "Facility"
+  | "Job"
+  | "Invoice"
+  | "Estimate";
+
+type CreateAuditLogOptions = {
+  action: AuditAction;
+  entityType: AuditEntityType;
+  entityId: number;
+  employeeId?: number | null;
+  details?: string | null;
+};
+
+const createAuditLog = async ({
+  action,
+  entityType,
+  entityId,
+  employeeId,
+  details,
+}: CreateAuditLogOptions) => {
+  await prisma.auditLog.create({
+    data: {
+      action,
+      entityType,
+      entityId,
+      employeeId: employeeId ?? null,
+      details: details ?? null,
+    },
+  });
+};
+
 const requireAuth = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -109,6 +148,8 @@ const requireAuth = async (
       employeeId: number;
     };
 
+    
+
     const employee = await prisma.employee.findUnique({
       where: {
         id: payload.employeeId,
@@ -123,6 +164,8 @@ const requireAuth = async (
         mustCompleteProfile: true,
       },
     });
+
+    
 
     if (!employee || !employee.isActive) {
       return res.status(401).json({
@@ -304,12 +347,16 @@ app.post("/api/auth/login", async (req, res) => {
         message: "Email and password are required",
       });
     }
+    console.log("LOGIN: Starting employee lookup");
 
     const employee = await prisma.employee.findUnique({
       where: {
         email: email.trim().toLowerCase(),
       },
+
+      
     });
+    console.log("LOGIN: Employee lookup completed");
 
     if (!employee || !employee.isActive) {
       return res.status(401).json({
@@ -741,47 +788,246 @@ app.get("/api/customers", async (_req, res) => {
   }
 });
 
-app.post("/api/customers", async (req, res) => {
-  try {
-    const {
-      name,
-      email,
-      phone,
-      address,
-      city,
-      state,
-      zipCode,
-      notes,
-    } = req.body;
+app.post(
+  "/api/customers",
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const {
+        name,
+        email,
+        phone,
+        address,
+        city,
+        state,
+        zipCode,
+        notes,
+      } = req.body;
 
-    if (!name?.trim()) {
-      return res.status(400).json({
-        message: "Customer name is required",
+      const employeeId = req.employee!.id;
+
+      if (!name?.trim()) {
+        return res.status(400).json({
+          message: "Customer name is required",
+        });
+      }
+
+      const customer =
+        await prisma.$transaction(
+          async (tx) => {
+            const createdCustomer =
+              await tx.customer.create({
+                data: {
+                  name: name.trim(),
+                  email:
+                    email?.trim() || null,
+                  phone:
+                    phone?.trim() || null,
+                  address:
+                    address?.trim() || null,
+                  city:
+                    city?.trim() || null,
+                  state:
+                    state?.trim() || null,
+                  zipCode:
+                    zipCode?.trim() || null,
+                  notes:
+                    notes?.trim() || null,
+
+                  createdById:
+                    employeeId,
+
+                  updatedById:
+                    employeeId,
+
+                  version: 1,
+                },
+              });
+
+            await tx.auditLog.create({
+              data: {
+                action: "CREATE",
+                entityType:
+                  "Customer",
+                entityId:
+                  createdCustomer.id,
+                employeeId,
+                details: `Created customer "${createdCustomer.name}"`,
+              },
+            });
+
+            return createdCustomer;
+          }
+        );
+
+      return res
+        .status(201)
+        .json(customer);
+    } catch (error) {
+      console.error(
+        "Unable to create customer:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to create customer",
       });
     }
+  }
+);
 
-    const customer = await prisma.customer.create({
-      data: {
-        name: name.trim(),
-        email: email?.trim() || null,
-        phone: phone?.trim() || null,
-        address: address?.trim() || null,
-        city: city?.trim() || null,
-        state: state?.trim() || null,
-        zipCode: zipCode?.trim() || null,
-        notes: notes?.trim() || null,
-      },
-    });
+app.put(
+  "/api/customers/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const id =
+        Number(req.params.id);
 
-    res.status(201).json(customer);
-  } catch (error) {
-    console.error(error);
+      const {
+        name,
+        email,
+        phone,
+        address,
+        city,
+        state,
+        zipCode,
+  notes,
+  expectedVersion,
+} = req.body;
 
-    res.status(500).json({
-      message: "Unable to create customer",
+      const employeeId =
+        req.employee!.id;
+
+        if (
+  !Number.isInteger(expectedVersion) ||
+  expectedVersion < 1
+) {
+  return res.status(400).json({
+    message: "A valid customer version is required.",
+  });
+}
+
+      if (!Number.isInteger(id)) {
+        return res.status(400).json({
+          message:
+            "Invalid customer ID",
+        });
+      }
+
+      if (!name?.trim()) {
+        return res.status(400).json({
+          message:
+            "Customer name is required",
+        });
+      }
+
+      const existingCustomer =
+        await prisma.customer.findUnique({
+          where: {
+            id,
+          },
+        });
+
+      if (!existingCustomer) {
+        return res.status(404).json({
+          message:
+            "Customer not found",
+        });
+      }
+
+      const customer =
+        await prisma.$transaction(
+          async (tx) => {
+            const updatedCustomer =
+  await tx.customer.update({
+    where: {
+      id,
+      version: expectedVersion,
+    },
+
+                data: {
+                  name:
+                    name.trim(),
+
+                  email:
+                    email?.trim() ||
+                    null,
+
+                  phone:
+                    phone?.trim() ||
+                    null,
+
+                  address:
+                    address?.trim() ||
+                    null,
+
+                  city:
+                    city?.trim() ||
+                    null,
+
+                  state:
+                    state?.trim() ||
+                    null,
+
+                  zipCode:
+                    zipCode?.trim() ||
+                    null,
+
+                  notes:
+                    notes?.trim() ||
+                    null,
+
+                  updatedById:
+                    employeeId,
+
+                  version: {
+                    increment: 1,
+                  },
+                },
+              });
+
+            await tx.auditLog.create({
+              data: {
+                action: "UPDATE",
+                entityType:
+                  "Customer",
+                entityId:
+                  updatedCustomer.id,
+                employeeId,
+                details: `Updated customer "${updatedCustomer.name}"`,
+              },
+            });
+
+            return updatedCustomer;
+          }
+        );
+
+      return res.json(customer);
+    } catch (error) {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "P2025"
+  ) {
+    return res.status(409).json({
+      message:
+        "This customer was updated by another employee. Please reload the record before saving again.",
     });
   }
-});
+
+  console.error(
+    "Unable to update customer:",
+    error
+  );
+
+      return res.status(500).json({
+        message:
+          "Unable to update customer",
+      });
+    }
+  }
+);
 
 app.get("/api/customers/:id", async (req, res) => {
   try {
@@ -2550,59 +2796,6 @@ app.post("/api/facilities", async (req, res) => {
   }
 });
 
-app.put("/api/customers/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-
-    if (!Number.isInteger(id)) {
-      return res.status(400).json({
-        message: "Invalid customer id",
-      });
-    }
-
-    const {
-      name,
-      email,
-      phone,
-      address,
-      city,
-      state,
-      zipCode,
-      notes,
-    } = req.body;
-
-    if (!name?.trim()) {
-      return res.status(400).json({
-        message: "Customer name is required",
-      });
-    }
-
-    const customer = await prisma.customer.update({
-      where: {
-        id,
-      },
-
-      data: {
-        name: name.trim(),
-        email: email?.trim() || null,
-        phone: phone?.trim() || null,
-        address: address?.trim() || null,
-        city: city?.trim() || null,
-        state: state?.trim() || null,
-        zipCode: zipCode?.trim() || null,
-        notes: notes?.trim() || null,
-      },
-    });
-
-    res.json(customer);
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "Unable to update customer",
-    });
-  }
-});
 
 app.listen(PORT, () => {
   console.log(`Longbranch server running on port ${PORT}`);

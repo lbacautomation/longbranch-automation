@@ -8,24 +8,33 @@ datasource db {
 }
 
 model Customer {
-  id         Int        @id @default(autoincrement())
-  name       String
-  email      String?
-  phone      String?
-  address    String?
-  city       String?
-  state      String?
-  zipCode    String?
-  notes      String?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id      Int     @id @default(autoincrement())
+  name    String
+  email   String?
+  phone   String?
+  address String?
+  city    String?
+  state   String?
+  zipCode String?
+  notes   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version   Int      @default(1)
+
+  createdById Int?
+  updatedById Int?
+
+  createdBy Employee? @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+  updatedBy Employee? @relation("CustomerUpdatedBy", fields: [updatedById], references: [id])
+
   facilities Facility[]
   invoices   Invoice[]
   estimates  Estimate[]
 }
 
 model Facility {
-  id         Int      @id @default(autoincrement())
+  id         Int     @id @default(autoincrement())
   name       String
   address    String?
   city       String?
@@ -33,11 +42,20 @@ model Facility {
   zipCode    String?
   notes      String?
   customerId Int
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version   Int      @default(1)
+
+  createdById Int?
+  updatedById Int?
 
   customer Customer @relation(fields: [customerId], references: [id])
-  jobs     Job[]
+
+  createdBy Employee? @relation("FacilityCreatedBy", fields: [createdById], references: [id])
+  updatedBy Employee? @relation("FacilityUpdatedBy", fields: [updatedById], references: [id])
+
+  jobs Job[]
 }
 
 model Job {
@@ -49,10 +67,19 @@ model Job {
   startDate   DateTime?
   endDate     DateTime?
   facilityId  Int
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
 
-  facility  Facility   @relation(fields: [facilityId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version   Int      @default(1)
+
+  createdById Int?
+  updatedById Int?
+
+  facility Facility @relation(fields: [facilityId], references: [id])
+
+  createdBy Employee? @relation("JobCreatedBy", fields: [createdById], references: [id])
+  updatedBy Employee? @relation("JobUpdatedBy", fields: [updatedById], references: [id])
+
   invoices  Invoice[]
   estimates Estimate[]
 }
@@ -75,9 +102,16 @@ model Invoice {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  version   Int      @default(1)
+
+  createdById Int?
+  updatedById Int?
 
   customer Customer @relation(fields: [customerId], references: [id])
-  job      Job?      @relation(fields: [jobId], references: [id])
+  job      Job?     @relation(fields: [jobId], references: [id])
+
+  createdBy Employee? @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  updatedBy Employee? @relation("InvoiceUpdatedBy", fields: [updatedById], references: [id])
 
   lineItems InvoiceLineItem[]
 }
@@ -115,9 +149,16 @@ model Estimate {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  version   Int      @default(1)
+
+  createdById Int?
+  updatedById Int?
 
   customer Customer @relation(fields: [customerId], references: [id])
-  job      Job?      @relation(fields: [jobId], references: [id])
+  job      Job?     @relation(fields: [jobId], references: [id])
+
+  createdBy Employee? @relation("EstimateCreatedBy", fields: [createdById], references: [id])
+  updatedBy Employee? @relation("EstimateUpdatedBy", fields: [updatedById], references: [id])
 
   lineItems EstimateLineItem[]
 }
@@ -139,24 +180,60 @@ model EstimateLineItem {
 }
 
 model Employee {
-  id                 Int      @id @default(autoincrement())
+  id                 Int     @id @default(autoincrement())
   name               String
-  email              String   @unique
+  email              String  @unique
   passwordHash       String
-  role               String   @default("EMPLOYEE")
-  isActive           Boolean  @default(true)
-  mustChangePassword Boolean  @default(false)
+  role               String  @default("EMPLOYEE")
+  isActive           Boolean @default(true)
+  mustChangePassword Boolean @default(false)
 
-  phone              String?
-  address            String?
-  city               String?
-  state              String?
-  zipCode            String?
-  startDate          DateTime?
-  emergencyContact   String?
-  emergencyPhone     String?
-  mustCompleteProfile Boolean @default(true)
+  phone               String?
+  address             String?
+  city                String?
+  state               String?
+  zipCode             String?
+  startDate           DateTime?
+  emergencyContact    String?
+  emergencyPhone      String?
+  mustCompleteProfile Boolean   @default(true)
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customersCreated Customer[] @relation("CustomerCreatedBy")
+  customersUpdated Customer[] @relation("CustomerUpdatedBy")
+
+  facilitiesCreated Facility[] @relation("FacilityCreatedBy")
+  facilitiesUpdated Facility[] @relation("FacilityUpdatedBy")
+
+  jobsCreated Job[] @relation("JobCreatedBy")
+  jobsUpdated Job[] @relation("JobUpdatedBy")
+
+  estimatesCreated Estimate[] @relation("EstimateCreatedBy")
+  estimatesUpdated Estimate[] @relation("EstimateUpdatedBy")
+
+  invoicesCreated Invoice[] @relation("InvoiceCreatedBy")
+  invoicesUpdated Invoice[] @relation("InvoiceUpdatedBy")
+
+  auditLogs AuditLog[]
+}
+
+model AuditLog {
+  id Int @id @default(autoincrement())
+
+  action     String
+  entityType String
+  entityId   Int
+
+  employeeId Int?
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
+  details String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([employeeId])
+  @@index([createdAt])
 }
