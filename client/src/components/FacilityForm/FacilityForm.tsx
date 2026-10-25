@@ -1,132 +1,141 @@
-import {
-  useState,
-  type FormEvent,
-} from "react";
 
+import { useState, type FormEvent } from "react";
 import { API_URL } from "../../services/api";
+
+export type EditableFacility = {
+  id: number;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+  notes?: string | null;
+  version: number;
+};
 
 type FacilityFormProps = {
   customerId: number;
+  facility?: EditableFacility | null;
   onCancel: () => void;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
 };
 
 function FacilityForm({
   customerId,
+  facility = null,
   onCancel,
   onSaved,
 }: FacilityFormProps) {
-  const [name, setName] =
-    useState("");
+  const isEditing = facility !== null;
 
-  const [address, setAddress] =
-    useState("");
+  const [name, setName] = useState(
+    facility?.name ?? ""
+  );
+  const [address, setAddress] = useState(
+    facility?.address ?? ""
+  );
+  const [city, setCity] = useState(
+    facility?.city ?? ""
+  );
+  const [state, setState] = useState(
+    facility?.state ?? ""
+  );
+  const [zipCode, setZipCode] = useState(
+    facility?.zipCode ?? ""
+  );
+  const [notes, setNotes] = useState(
+    facility?.notes ?? ""
+  );
 
-  const [city, setCity] =
-    useState("");
-
-  const [state, setState] =
-    useState("");
-
-  const [zipCode, setZipCode] =
-    useState("");
-
-  const [notes, setNotes] =
-    useState("");
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [conflict, setConflict] = useState(false);
 
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
+    if (saving) return;
+
     setError("");
+    setConflict(false);
 
     if (!name.trim()) {
+      setError("Facility name is required.");
+      return;
+    }
+
+    if (
+      isEditing &&
+      (!Number.isInteger(facility.version) ||
+        facility.version < 1)
+    ) {
       setError(
-        "Facility name is required."
+        "The facility version is missing. Reload the customer before editing."
       );
       return;
     }
 
+    setSaving(true);
+
     try {
-      setSaving(true);
+      const payload = {
+        name: name.trim(),
+        address: address.trim() || null,
+        city: city.trim() || null,
+        state: state.trim() || null,
+        zipCode: zipCode.trim() || null,
+        notes: notes.trim() || null,
+        customerId,
+        ...(facility
+          ? { expectedVersion: facility.version }
+          : {}),
+      };
 
-      const response =
-        await fetch(
-          `${API_URL}/api/facilities`,
-          {
-             credentials: "include",
-            method: "POST",
+      const url = facility
+        ? `${API_URL}/api/facilities/${facility.id}`
+        : `${API_URL}/api/facilities`;
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-
-            body: JSON.stringify({
-              name:
-                name.trim(),
-
-              address:
-                address.trim() ||
-                null,
-
-              city:
-                city.trim() ||
-                null,
-
-              state:
-                state.trim() ||
-                null,
-
-              zipCode:
-                zipCode.trim() ||
-                null,
-
-              notes:
-                notes.trim() ||
-                null,
-
-              customerId,
-            }),
-          }
-        );
+      const response = await fetch(url, {
+        method: facility ? "PUT" : "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
-        let message =
-          "Unable to create facility.";
+        let message = facility
+          ? "Unable to update facility."
+          : "Unable to create facility.";
 
         try {
-          const data =
-            await response.json();
+          const data = await response.json();
 
-          if (data.message) {
-            message =
-              data.message;
+          if (typeof data.message === "string") {
+            message = data.message;
           }
         } catch {
-          // Ignore non-JSON errors
+          // The server may return a non-JSON error.
         }
 
-        throw new Error(
-          message
-        );
+        if (response.status === 409) {
+          setConflict(true);
+        }
+
+        throw new Error(message);
       }
 
-      onSaved();
-    } catch (error) {
-      console.error(error);
+      await onSaved();
+    } catch (caughtError) {
+      console.error(caughtError);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to create facility."
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to save facility."
       );
     } finally {
       setSaving(false);
@@ -138,26 +147,25 @@ function FacilityForm({
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Longbranch Automation
-            & Controls
+            Longbranch Automation &amp; Controls
           </p>
 
           <h2>
-            New Facility
+            {isEditing ? "Edit Facility" : "New Facility"}
           </h2>
 
           <p className="subtitle">
-            Add a customer
-            location or site.
+            {isEditing
+              ? "Update this customer location or site."
+              : "Add a customer location or site."}
           </p>
         </div>
 
         <button
           type="button"
           className="secondary-button"
-          onClick={
-            onCancel
-          }
+          onClick={onCancel}
+          disabled={saving}
         >
           Back to Customer
         </button>
@@ -165,128 +173,97 @@ function FacilityForm({
 
       <form
         className="invoice-form"
-        onSubmit={
-          handleSubmit
-        }
+        onSubmit={handleSubmit}
       >
         {error && (
-          <div className="form-error">
-            {error}
+          <div
+            className="form-error"
+            role="alert"
+          >
+            <p>{error}</p>
+
+            {conflict && (
+              <p>
+                Your changes were not saved. Return
+                to the customer, reload the latest
+                facility information, and try again.
+              </p>
+            )}
           </div>
         )}
 
         <section className="form-card">
           <div className="form-card-header">
             <div>
-              <h3>
-                Facility Details
-              </h3>
-
-              <p>
-                Location and site
-                information.
-              </p>
+              <h3>Facility Details</h3>
+              <p>Location and site information.</p>
             </div>
           </div>
 
           <div className="form-grid">
             <label>
-              <span>
-                Facility Name
-              </span>
-
+              <span>Facility Name *</span>
               <input
                 type="text"
                 value={name}
-                onChange={(
-                  event
-                ) =>
-                  setName(
-                    event.target
-                      .value
-                  )
+                onChange={(event) =>
+                  setName(event.target.value)
                 }
                 placeholder="Main Plant"
+                required
+                disabled={saving}
               />
             </label>
 
             <label>
-              <span>
-                Address
-              </span>
-
+              <span>Address</span>
               <input
                 type="text"
                 value={address}
-                onChange={(
-                  event
-                ) =>
-                  setAddress(
-                    event.target
-                      .value
-                  )
+                onChange={(event) =>
+                  setAddress(event.target.value)
                 }
                 placeholder="123 Industrial Way"
+                disabled={saving}
               />
             </label>
 
             <label>
-              <span>
-                City
-              </span>
-
+              <span>City</span>
               <input
                 type="text"
                 value={city}
-                onChange={(
-                  event
-                ) =>
-                  setCity(
-                    event.target
-                      .value
-                  )
+                onChange={(event) =>
+                  setCity(event.target.value)
                 }
                 placeholder="Columbus"
+                disabled={saving}
               />
             </label>
 
             <label>
-              <span>
-                State
-              </span>
-
+              <span>State</span>
               <input
                 type="text"
                 value={state}
-                onChange={(
-                  event
-                ) =>
-                  setState(
-                    event.target
-                      .value
-                  )
+                onChange={(event) =>
+                  setState(event.target.value)
                 }
                 placeholder="GA"
+                disabled={saving}
               />
             </label>
 
             <label>
-              <span>
-                ZIP Code
-              </span>
-
+              <span>ZIP Code</span>
               <input
                 type="text"
                 value={zipCode}
-                onChange={(
-                  event
-                ) =>
-                  setZipCode(
-                    event.target
-                      .value
-                  )
+                onChange={(event) =>
+                  setZipCode(event.target.value)
                 }
                 placeholder="31901"
+                disabled={saving}
               />
             </label>
           </div>
@@ -295,13 +272,10 @@ function FacilityForm({
         <section className="form-card">
           <div className="form-card-header">
             <div>
-              <h3>
-                Notes
-              </h3>
-
+              <h3>Notes</h3>
               <p>
-                Optional information
-                about this facility.
+                Optional information about this
+                facility.
               </p>
             </div>
           </div>
@@ -309,29 +283,42 @@ function FacilityForm({
           <textarea
             rows={6}
             value={notes}
-            onChange={(
-              event
-            ) =>
-              setNotes(
-                event.target
-                  .value
-              )
+            onChange={(event) =>
+              setNotes(event.target.value)
             }
             placeholder="Add facility notes..."
+            disabled={saving}
           />
         </section>
 
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={
-            saving
-          }
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            flexWrap: "wrap",
+          }}
         >
-          {saving
-            ? "Creating Facility..."
-            : "Create Facility"}
-        </button>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={saving || conflict}
+          >
+            {saving
+              ? "Saving Facility..."
+              : isEditing
+                ? "Save Changes"
+                : "Create Facility"}
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onCancel}
+            disabled={saving}
+          >
+            Cancel
+          </button>
+        </div>
       </form>
     </>
   );

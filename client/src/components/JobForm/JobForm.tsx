@@ -1,5 +1,7 @@
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -106,12 +108,51 @@ function JobForm({
   const [error, setError] =
     useState("");
 
+    const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+const [autoSaveStatus, setAutoSaveStatus] = useState<
+  "idle" | "saving" | "saved" | "error" | "conflict"
+>("idle");
+
+const saveInProgressRef = useRef(false);
+
+const latestVersionRef = useRef(job?.version ?? 1);
+
+const autoSaveConflictRef = useRef(false);
+
+const lastSavedDataRef = useRef(
+  JSON.stringify({
+    name: job?.name ?? "",
+    description: job?.description ?? "",
+    status: job?.status ?? "OPEN",
+    startDate: job?.startDate?.slice(0, 10) ?? "",
+    endDate: job?.endDate?.slice(0, 10) ?? "",
+   facilityId: job?.facility?.id ?? null,
+  })
+);
+
+const currentFormData = JSON.stringify({
+  name,
+  description,
+  status,
+  startDate,
+  endDate,
+  facilityId: facilityId
+    ? Number(facilityId)
+    : null,
+});
+
+const hasUnsavedChanges =
+  currentFormData !== lastSavedDataRef.current;
+
   const selectedCustomer =
     customers.find(
       (customer) =>
         customer.id ===
         Number(customerId)
     );
+
+   
 
   const facilities =
     useMemo(
@@ -121,10 +162,129 @@ function JobForm({
       [selectedCustomer]
     );
 
+    const saveJobAutomatically = async () => {
+  if (
+    !isEditing ||
+    !job?.id ||
+    !name.trim() ||
+    !facilityId ||
+    saveInProgressRef.current ||
+   autoSaveConflictRef.current
+  ) {
+    return;
+  }
+
+ saveInProgressRef.current = true;
+setAutoSaveStatus("saving");
+
+const dataBeingSaved = currentFormData;
+
+try {
+  const response = await fetch(
+    `${API_URL}/api/jobs/${job?.id}`,
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jobNumber: job?.jobNumber,
+        expectedVersion: latestVersionRef.current,
+        name: name.trim(),
+        description: description.trim() || null,
+        status,
+        startDate: startDate || null,
+        endDate: endDate || null,
+        facilityId: Number(facilityId),
+      }),
+    }
+  );
+
+ if (response.status === 409) {
+  autoSaveConflictRef.current = true;
+  setAutoSaveStatus("conflict");
+    setError(
+      "Another employee changed this job. Autosave has stopped. " +
+      "Return to Jobs and reopen the job before making more changes."
+    );
+    return;
+  }
+
+  if (!response.ok) {
+    throw new Error("Unable to autosave job.");
+  }
+
+  const savedJob: Job = await response.json();
+
+  latestVersionRef.current = savedJob.version;
+  lastSavedDataRef.current = dataBeingSaved;
+
+  setLastSaved(new Date());
+  setAutoSaveStatus("saved");
+  setError("");
+} catch (error) {
+  console.error("Job autosave failed:", error);
+  setAutoSaveStatus("error");
+  setError(
+    "Autosave failed. Your changes are still in the form."
+  );
+} finally {
+  saveInProgressRef.current = false;
+}
+
+useEffect(() => {
+  console.warn("Autosave check", {
+  isEditing,
+  hasUnsavedChanges,
+  autoSaveStatus,
+  conflict: autoSaveConflictRef.current,
+});
+ if (
+  !isEditing ||
+  !hasUnsavedChanges ||
+  autoSaveConflictRef.current
+) {
+  return;
+}
+
+ 
+
+ const timer = window.setTimeout(() => {
+  console.log("60-second autosave timer fired");
+  void saveJobAutomatically();
+}, 60000);
+
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [
+  isEditing,
+  hasUnsavedChanges,
+]);
+};
+
+
+
+
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
+
+    if (saveInProgressRef.current) {
+  setError(
+    "Autosave is in progress. Please wait a moment before saving."
+  );
+  return;
+}
+
+if (autoSaveConflictRef.current) {
+  setError(
+    "Another employee changed this job. Return to Jobs and reopen it before saving."
+  );
+  return;
+}
 
     setError("");
 
@@ -152,14 +312,17 @@ function JobForm({
           ? `${API_URL}/api/jobs/${job?.id}`
           : `${API_URL}/api/facilities/${facilityId}/jobs`;
 
-      const body =
-        isEditing
-          ? {
-              jobNumber:
-                job?.jobNumber,
+     const body =
+  isEditing
+    ? {
+        jobNumber:
+          job?.jobNumber,
 
-              name:
-                name.trim(),
+       expectedVersion:
+  latestVersionRef.current,
+
+        name:
+          name.trim(),
 
               description:
                 description.trim() ||
@@ -223,38 +386,37 @@ function JobForm({
           }
         );
 
-      if (!response.ok) {
-        let message =
-          isEditing
-            ? "Unable to update job."
-            : "Unable to create job.";
+    if (!response.ok) {
+  let message = isEditing
+    ? "Unable to update job."
+    : "Unable to create job.";
 
-        try {
-          const data =
-            await response.json();
+  if (response.status === 409) {
+    message =
+      "This job has been changed by another employee. " +
+      "Your changes were not saved. Return to Jobs and reopen the job.";
+  }
 
-          if (
-            data.message
-          ) {
-            message =
-              data.message;
-          }
-        } catch {
-          // Ignore non-JSON errors
-        }
+  try {
+    const data = await response.json();
 
-        throw new Error(
-          message
-        );
-      }
+    if (data.message && response.status !== 409) {
+      message = data.message;
+    }
+  } catch {
+    // Ignore non-JSON errors
+  }
 
-      const savedJob:
-        Job =
-          await response.json();
+  throw new Error(message);
+}
 
-      onSaved(
-        savedJob
-      );
+     const savedJob: Job =
+  await response.json();
+
+latestVersionRef.current =
+  savedJob.version;
+
+onSaved(savedJob);
     } catch (error) {
       console.error(
         error
@@ -292,6 +454,11 @@ function JobForm({
               ? "Update job information."
               : "Create a job for a customer facility."}
           </p>
+          {isEditing && lastSaved && (
+  <p className="subtitle">
+    Autosaved at {lastSaved.toLocaleTimeString()}
+  </p>
+)}
         </div>
 
         <button

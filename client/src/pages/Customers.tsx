@@ -5,7 +5,9 @@ import {
 
 import CustomerForm from "../components/CustomerForm/CustomerForm";
 import CustomerTable from "../components/CustomerTable/CustomerTable";
-import FacilityForm from "../components/FacilityForm/FacilityForm";
+import FacilityForm, {
+  type EditableFacility,
+} from "../components/FacilityForm/FacilityForm";
 import { API_URL } from "../services/api";
 
 import type {
@@ -73,6 +75,9 @@ function Customers({
     showFacilityForm,
     setShowFacilityForm,
   ] = useState(false);
+
+  const [editingFacility, setEditingFacility] =
+  useState<EditableFacility | null>(null);
 
   const loadCustomers =
     async () => {
@@ -325,26 +330,22 @@ function Customers({
   }
 };
 
-  if (
-    showFacilityForm &&
-    selectedCustomer
-  ) {
-    return (
-      <FacilityForm
-        customerId={
-          selectedCustomer.id
-        }
-        onCancel={() =>
-          setShowFacilityForm(
-            false
-          )
-        }
-        onSaved={
-          handleFacilitySaved
-        }
-      />
-    );
-  }
+  if (showFacilityForm && selectedCustomer) {
+  return (
+    <FacilityForm
+      customerId={selectedCustomer.id}
+      facility={editingFacility}
+      onCancel={() => {
+        setShowFacilityForm(false);
+        setEditingFacility(null);
+      }}
+      onSaved={async () => {
+        await handleFacilitySaved();
+        setEditingFacility(null);
+      }}
+    />
+  );
+}
 
   if (
     showNewCustomer ||
@@ -563,17 +564,16 @@ function Customers({
               </p>
             </div>
 
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() =>
-                setShowFacilityForm(
-                  true
-                )
-              }
-            >
-              + Add Facility
-            </button>
+           <button
+  type="button"
+  className="primary-button"
+  onClick={() => {
+    setEditingFacility(null);
+    setShowFacilityForm(true);
+  }}
+>
+  + Add Facility
+</button>
           </div>
 
           {facilities.length ===
@@ -637,6 +637,27 @@ function Customers({
     ).length
   }
 </span>
+
+<button
+  type="button"
+  className="secondary-button"
+  onClick={() => {
+    setEditingFacility({
+      id: facility.id,
+      name: facility.name,
+      address: facility.address,
+      city: facility.city,
+      state: facility.state,
+      zipCode: facility.zipCode,
+      notes: facility.notes,
+      version: facility.version,
+    });
+
+    setShowFacilityForm(true);
+  }}
+>
+  Edit
+</button>
 
 <span>
   <button

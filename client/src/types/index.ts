@@ -16,9 +16,12 @@ notes?: string | null;
     city?: string | null;
     state?: string | null;
     zipCode?: string | null;
+    notes?: string | null;
+version: number;
 
     jobs?: {
       id: number;
+      version: number;
       jobNumber: string;
       name: string;
       status?: string;
@@ -28,6 +31,7 @@ notes?: string | null;
 
 export type Job = {
   id: number;
+  version: number;
   jobNumber: string;
   name: string;
   description?: string | null;

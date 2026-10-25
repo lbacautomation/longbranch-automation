@@ -1147,6 +1147,136 @@ app.delete("/api/facilities/:id", async (req, res) => {
   }
 });
 
+
+app.put(
+  "/api/facilities/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = Number(req.params.id);
+
+      if (!Number.isInteger(id) || id < 1) {
+        return res.status(400).json({
+          message: "Invalid facility ID",
+        });
+      }
+
+      const {
+        name,
+        address,
+        city,
+        state,
+        zipCode,
+        notes,
+        expectedVersion,
+      } = req.body;
+
+      if (
+        typeof name !== "string" ||
+        !name.trim()
+      ) {
+        return res.status(400).json({
+          message: "Facility name is required",
+        });
+      }
+
+      if (
+        !Number.isInteger(expectedVersion) ||
+        expectedVersion < 1
+      ) {
+        return res.status(400).json({
+          message:
+            "A valid facility version is required.",
+        });
+      }
+
+      const employeeId = req.employee!.id;
+
+      const existingFacility =
+        await prisma.facility.findUnique({
+          where: { id },
+        });
+
+      if (!existingFacility) {
+        return res.status(404).json({
+          message: "Facility not found",
+        });
+      }
+
+      if (
+        existingFacility.version !== expectedVersion
+      ) {
+        return res.status(409).json({
+          message:
+            "This facility was changed by another employee. Reload the facility before saving.",
+        });
+      }
+
+      const facility = await prisma.$transaction(
+        async (tx) => {
+          const updated = await tx.facility.update({
+            where: {
+              id,
+              version: expectedVersion,
+            },
+            data: {
+              name: name.trim(),
+              address: address?.trim() || null,
+              city: city?.trim() || null,
+              state: state?.trim() || null,
+              zipCode: zipCode?.trim() || null,
+              notes: notes?.trim() || null,
+              updatedById: employeeId,
+              version: {
+                increment: 1,
+              },
+            },
+            include: {
+              jobs: true,
+            },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              action: "UPDATE",
+              entityType: "Facility",
+              entityId: updated.id,
+              employeeId,
+              details:
+                `Updated facility "${updated.name}"`,
+            },
+          });
+
+          return updated;
+        }
+      );
+
+      return res.json(facility);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "P2025"
+      ) {
+        return res.status(409).json({
+          message:
+            "This facility was changed or deleted by another employee. Reload before saving.",
+        });
+      }
+
+      console.error(
+        "Unable to update facility:",
+        error
+      );
+
+      return res.status(500).json({
+        message: "Unable to update facility",
+      });
+    }
+  }
+);
+
+
 app.post("/api/facilities/:id/jobs", async (req, res) => {
   try {
     const facilityId = Number(req.params.id);
@@ -1367,9 +1497,16 @@ app.get("/api/jobs/:id", async (req, res) => {
     });
   }
 });
-app.put("/api/jobs/:id", async (req, res) => {
+
+app.put("/api/jobs/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        message: "Invalid job ID.",
+      });
+    }
 
     const {
       jobNumber,
@@ -1379,85 +1516,179 @@ app.put("/api/jobs/:id", async (req, res) => {
       startDate,
       endDate,
       facilityId,
+      expectedVersion,
     } = req.body;
 
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      return res.status(400).json({
+        message: "A valid job version is required.",
+      });
+    }
+
+    if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+      return res.status(400).json({
+        message: "Job name cannot be empty.",
+      });
+    }
+
+    const parseDate = (value: unknown): Date | null | undefined => {
+      if (value === undefined) return undefined;
+      if (value === null || value === "") return null;
+      if (typeof value !== "string") {
+        throw new Error("INVALID_DATE");
+      }
+
+      const parsed = new Date(value);
+
+      if (Number.isNaN(parsed.getTime())) {
+        throw new Error("INVALID_DATE");
+      }
+
+      return parsed;
+    };
+
+    let parsedStartDate: Date | null | undefined;
+    let parsedEndDate: Date | null | undefined;
+
+    try {
+      parsedStartDate = parseDate(startDate);
+      parsedEndDate = parseDate(endDate);
+    } catch {
+      return res.status(400).json({
+        message: "Please enter valid job dates.",
+      });
+    }
+
+    if (
+      facilityId !== undefined &&
+      (!Number.isInteger(facilityId) || facilityId <= 0)
+    ) {
+      return res.status(400).json({
+        message: "Invalid facility ID.",
+      });
+    }
+
+    const employeeId = req.employee!.id;
+
     const existingJob = await prisma.job.findUnique({
       where: { id },
     });
 
     if (!existingJob) {
       return res.status(404).json({
-        message: "Job not found",
+        message: "Job not found.",
       });
     }
 
-    const updatedJob = await prisma.job.update({
-      where: { id },
-      data: {
-        jobNumber: jobNumber?.trim() || existingJob.jobNumber,
-        name: name?.trim() || existingJob.name,
-        description:
-          description !== undefined ? description || null : existingJob.description,
-        status: status || existingJob.status,
-        startDate:
-          startDate !== undefined
-            ? startDate
-              ? new Date(startDate)
-              : null
-            : existingJob.startDate,
-        endDate:
-          endDate !== undefined
-            ? endDate
-              ? new Date(endDate)
-              : null
-            : existingJob.endDate,
-        facilityId: facilityId || existingJob.facilityId,
-      },
-      include: {
-        facility: {
-          include: {
-            customer: true,
+    if (existingJob.version !== expectedVersion) {
+      return res.status(409).json({
+        message:
+          "This job was changed by another employee. Reload before saving.",
+      });
+    }
+
+    const updatedJob = await prisma.$transaction(async (tx) => {
+      const updated = await tx.job.update({
+        where: {
+          id,
+          version: expectedVersion,
+        },
+        data: {
+          ...(jobNumber !== undefined && {
+            jobNumber:
+              typeof jobNumber === "string" && jobNumber.trim()
+                ? jobNumber.trim()
+                : existingJob.jobNumber,
+          }),
+          ...(name !== undefined && {
+            name: name.trim(),
+          }),
+          ...(description !== undefined && {
+            description:
+              typeof description === "string"
+                ? description.trim() || null
+                : null,
+          }),
+          ...(status !== undefined && {
+            status,
+          }),
+          ...(parsedStartDate !== undefined && {
+            startDate: parsedStartDate,
+          }),
+          ...(parsedEndDate !== undefined && {
+            endDate: parsedEndDate,
+          }),
+          ...(facilityId !== undefined && {
+            facilityId,
+          }),
+          updatedById: employeeId,
+          version: {
+            increment: 1,
           },
         },
-      },
+        include: {
+          facility: {
+            include: {
+              customer: true,
+            },
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: "UPDATE",
+          entityType: "Job",
+          entityId: updated.id,
+          employeeId,
+          details: `Updated job "${updated.jobNumber}"`,
+        },
+      });
+
+      return updated;
     });
 
-    res.json(updatedJob);
+    return res.json(updatedJob);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Unable to update job",
-    });
-  }
-});
-app.delete("/api/jobs/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-
-    const existingJob = await prisma.job.findUnique({
-      where: { id },
-    });
-
-    if (!existingJob) {
-      return res.status(404).json({
-        message: "Job not found",
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
+      return res.status(409).json({
+        message:
+          "This job was changed or deleted by another employee. Reload before saving.",
       });
     }
 
-    await prisma.job.delete({
-      where: { id },
-    });
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      return res.status(409).json({
+        message: "That job number is already in use.",
+      });
+    }
 
-    res.json({
-      message: "Job deleted successfully",
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Unable to delete job",
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "P2003"
+    ) {
+      return res.status(400).json({
+        message: "The selected facility does not exist.",
+      });
+    }
+
+    console.error("Unable to update job:", error);
+
+    return res.status(500).json({
+      message: "Unable to update job.",
     });
   }
 });
+
 
 app.delete("/api/customers/:id", async (req, res) => {
   try {
@@ -2714,87 +2945,224 @@ app.delete(
   }
 );
 
-app.post("/api/facilities", async (req, res) => {
-  try {
-    const {
-      name,
-      address,
-      city,
-      state,
-      zipCode,
-      notes,
-      customerId,
-    } = req.body;
 
-    if (!name?.trim()) {
-      return res.status(400).json({
-        message: "Facility name is required",
+app.post(
+  "/api/facilities",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const {
+        name,
+        address,
+        city,
+        state,
+        zipCode,
+        notes,
+        customerId,
+      } = req.body;
+
+      const employeeId = req.employee!.id;
+      const parsedCustomerId = Number(customerId);
+
+      if (typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({
+          message: "Facility name is required.",
+        });
+      }
+
+      if (
+        !Number.isInteger(parsedCustomerId) ||
+        parsedCustomerId < 1
+      ) {
+        return res.status(400).json({
+          message: "Valid customer ID is required.",
+        });
+      }
+
+      const customer = await prisma.customer.findUnique({
+        where: { id: parsedCustomerId },
+        select: { id: true },
+      });
+
+      if (!customer) {
+        return res.status(404).json({
+          message: "Customer not found.",
+        });
+      }
+
+      const facility = await prisma.$transaction(
+        async (tx) => {
+          const createdFacility = await tx.facility.create({
+            data: {
+              name: name.trim(),
+              address: address?.trim() || null,
+              city: city?.trim() || null,
+              state: state?.trim() || null,
+              zipCode: zipCode?.trim() || null,
+              notes: notes?.trim() || null,
+              customerId: parsedCustomerId,
+              createdById: employeeId,
+              updatedById: employeeId,
+              version: 1,
+            },
+            include: {
+              jobs: true,
+            },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              action: "CREATE",
+              entityType: "Facility",
+              entityId: createdFacility.id,
+              employeeId,
+              details: `Created facility "${createdFacility.name}"`,
+            },
+          });
+
+          return createdFacility;
+        }
+      );
+
+      return res.status(201).json(facility);
+    } catch (error) {
+      console.error("Unable to create facility:", error);
+
+      return res.status(500).json({
+        message: "Unable to create facility.",
       });
     }
-
-    const parsedCustomerId =
-      Number(customerId);
-
-    if (
-      !Number.isInteger(
-        parsedCustomerId
-      )
-    ) {
-      return res.status(400).json({
-        message:
-          "Valid customer ID is required",
-      });
-    }
-
-    const facility =
-      await prisma.facility.create({
-        data: {
-          name: name.trim(),
-
-          address:
-            address?.trim() ||
-            null,
-
-          city:
-            city?.trim() ||
-            null,
-
-          state:
-            state?.trim() ||
-            null,
-
-          zipCode:
-            zipCode?.trim() ||
-            null,
-
-          notes:
-            notes?.trim() ||
-            null,
-
-          customerId:
-            parsedCustomerId,
-        },
-
-        include: {
-          jobs: true,
-        },
-      });
-
-    return res
-      .status(201)
-      .json(facility);
-  } catch (error) {
-    console.error(
-      "Unable to create facility:",
-      error
-    );
-
-    return res.status(500).json({
-      message:
-        "Unable to create facility",
-    });
   }
-});
+);
+
+
+app.put(
+  "/api/facilities/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = Number(req.params.id);
+
+      const {
+        name,
+        address,
+        city,
+        state,
+        zipCode,
+        notes,
+        expectedVersion,
+      } = req.body;
+
+      if (!Number.isInteger(id) || id < 1) {
+        return res.status(400).json({
+          message: "Invalid facility ID.",
+        });
+      }
+
+      if (typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({
+          message: "Facility name is required.",
+        });
+      }
+
+      if (
+        !Number.isInteger(expectedVersion) ||
+        expectedVersion < 1
+      ) {
+        return res.status(400).json({
+          message: "A valid facility version is required.",
+        });
+      }
+
+      const existingFacility =
+        await prisma.facility.findUnique({
+          where: { id },
+        });
+
+      if (!existingFacility) {
+        return res.status(404).json({
+          message: "Facility not found.",
+        });
+      }
+
+      const employeeId = req.employee!.id;
+
+      const facility = await prisma.$transaction(
+        async (tx) => {
+          const updatedFacility =
+            await tx.facility.update({
+              where: {
+                id,
+                version: expectedVersion,
+              },
+              data: {
+                name: name.trim(),
+                address:
+                  typeof address === "string"
+                    ? address.trim() || null
+                    : null,
+                city:
+                  typeof city === "string"
+                    ? city.trim() || null
+                    : null,
+                state:
+                  typeof state === "string"
+                    ? state.trim() || null
+                    : null,
+                zipCode:
+                  typeof zipCode === "string"
+                    ? zipCode.trim() || null
+                    : null,
+                notes:
+                  typeof notes === "string"
+                    ? notes.trim() || null
+                    : null,
+                updatedById: employeeId,
+                version: {
+                  increment: 1,
+                },
+              },
+              include: {
+                jobs: true,
+              },
+            });
+
+          await tx.auditLog.create({
+            data: {
+              action: "UPDATE",
+              entityType: "Facility",
+              entityId: updatedFacility.id,
+              employeeId,
+              details: `Updated facility "${updatedFacility.name}"`,
+            },
+          });
+
+          return updatedFacility;
+        }
+      );
+
+      return res.json(facility);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "P2025"
+      ) {
+        return res.status(409).json({
+          message:
+            "This facility was changed by another employee. Reload the facility before saving again.",
+        });
+      }
+
+      console.error("Unable to update facility:", error);
+
+      return res.status(500).json({
+        message: "Unable to update facility.",
+      });
+    }
+  }
+);
+
 
 
 app.listen(PORT, () => {
