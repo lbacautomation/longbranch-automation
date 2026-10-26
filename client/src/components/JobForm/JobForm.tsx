@@ -163,6 +163,14 @@ const hasUnsavedChanges =
     );
 
     const saveJobAutomatically = async () => {
+      console.log("AUTOSAVE FUNCTION CALLED", {
+  isEditing,
+  jobId: job?.id,
+  facilityId,
+  hasUnsavedChanges,
+  saving: saveInProgressRef.current,
+  conflict: autoSaveConflictRef.current,
+});
   if (
     !isEditing ||
     !job?.id ||
@@ -232,6 +240,7 @@ try {
 } finally {
   saveInProgressRef.current = false;
 }
+};
 
 useEffect(() => {
   console.warn("Autosave check", {
@@ -262,7 +271,7 @@ useEffect(() => {
   isEditing,
   hasUnsavedChanges,
 ]);
-};
+
 
 
 
